@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "acdbba433885869938c72251384e3120"
-name = "apptesting"
+client_id = "2cae84e40d8a52516744f379d6ab7edb"
+name = "FrontsideTex"
 application_url = "https://shopify.dev/apps/default-app-home"
 embedded = true
 
