@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+/*
+ * Brand styling for PUBLIC, non-embedded pages only (landing, pricing, privacy,
+ * ticket view). Loaded per-route via `links()` — never from root.tsx — so
+ * Tailwind's preflight reset never reaches the Polaris embedded admin pages.
+ */
+
+:root {
+  --background: #ffffff;
+  --foreground: #1a2328;
+  --brand-burnt-red: #c7423a;
+  --brand-orange: #e86f1d;
+  --brand-gold: #f2b544;
+  --brand-cream-muted: #36434c;
+  --brand-sage: #8faf9a;
+  --brand-teal: #3f8f83;
+  --brand-teal-hover: #4fafa0;
+  --brand-orange-hover: #ff7f2a;
+  --brand-subtext: #6b7780;
+  --brand-panel: #f7f8fa;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand-burnt-red: var(--brand-burnt-red);
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-cream-muted: var(--brand-cream-muted);
+  --color-brand-sage: var(--brand-sage);
+  --color-brand-teal: var(--brand-teal);
+  --color-brand-teal-hover: var(--brand-teal-hover);
+  --color-brand-orange-hover: var(--brand-orange-hover);
+  --color-brand-subtext: var(--brand-subtext);
+  --color-brand-panel: var(--brand-panel);
+  --font-sans:
+    "Inter", "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Inter", "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
+  background-image: none;
+}
+
+::selection {
+  background: rgba(63, 143, 131, 0.22);
+  color: #0f1a20;
+}
+
+a {
+  color: #2d7d73;
+}
+
+.brand-card {
+  background: #ffffff;
+  border: 1px solid #dde3e8;
+  box-shadow: 0 8px 26px rgba(16, 32, 44, 0.08);
+}
+
+.brand-input {
+  background: #ffffff;
+  border: 1px solid #ccd6dd;
+  color: var(--foreground);
+}
+
+.brand-input::placeholder {
+  color: #86939d;
+}
+
+.brand-input:focus {
+  outline: 2px solid rgba(63, 143, 131, 0.42);
+  outline-offset: 1px;
+}
+
+.brand-button-primary {
+  color: #fff6ea;
+  background: linear-gradient(
+    90deg,
+    var(--brand-burnt-red) 0%,
+    var(--brand-orange) 56%,
+    var(--brand-gold) 100%
+  );
+}
+
+.brand-button-primary:hover {
+  background: linear-gradient(
+    90deg,
+    var(--brand-burnt-red) 0%,
+    var(--brand-orange-hover) 56%,
+    var(--brand-gold) 100%
+  );
+}
+
+.brand-button-secondary {
+  background: #f3f6f8;
+  border: 1px solid #d1dae1;
+  color: var(--foreground);
+}

@@ -1,0 +1,174 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" for local dev; the rhel target is for Vercel's serverless runtime.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (Neon pooler) for app runtime on serverless.
+  url       = env("DATABASE_URL")
+  // Direct (non-pooled) connection for migrations.
+  directUrl = env("DIRECT_URL")
+}
+
+// --- Shopify managed auth (DO NOT MODIFY) ---
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+// --- Ticketing app models (ported from shopifyticketing) ---
+// NOTE: auth columns (accessToken/refreshToken/accessTokenExpiresAt) are intentionally
+// dropped — the Shopify token now lives in Session, managed by the template. Shop is kept
+// purely as the per-shop anchor for ticketing data, keyed by shopDomain.
+model Shop {
+  id                String              @id @default(cuid())
+  shopDomain        String              @unique
+  emailLogoUrl      String?
+  scopes            String?
+  installedAt       DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  tickets           OrderTicket[]
+  ticketProducts    ShopTicketProduct[]
+  privacyWebhookLog PrivacyWebhookLog[]
+  creditBalance     ShopCreditBalance?
+  creditLedger      ShopCreditLedger[]
+  billingPurchases  BillingPurchase[]
+}
+
+model BillingTier {
+  id            String             @id @default(cuid())
+  code          String             @unique
+  name          String
+  ticketCredits Int
+  priceCents    Int
+  currencyCode  String             @default("USD")
+  active        Boolean            @default(true)
+  sortOrder     Int                @default(0)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  purchases     BillingPurchase[]
+  ledgerEntries ShopCreditLedger[]
+}
+
+model ShopCreditBalance {
+  shopId                  String   @id
+  shop                    Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  freeCreditsRemaining    Int      @default(50)
+  purchasedCreditsBalance Int      @default(0)
+  lifetimePurchased       Int      @default(0)
+  lifetimeConsumed        Int      @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model ShopCreditLedger {
+  id               String       @id @default(cuid())
+  shopId           String
+  shop             Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  billingTierId    String?
+  billingTier      BillingTier? @relation(fields: [billingTierId], references: [id], onDelete: SetNull)
+  type             String
+  creditsDelta     Int
+  amountCents      Int?
+  currencyCode     String?
+  externalChargeId String?      @unique
+  note             String?
+  createdAt        DateTime     @default(now())
+
+  @@index([shopId, createdAt])
+}
+
+model BillingPurchase {
+  id              String      @id @default(cuid())
+  shopId          String
+  shop            Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  billingTierId   String
+  billingTier     BillingTier @relation(fields: [billingTierId], references: [id], onDelete: Restrict)
+  shopifyChargeId String      @unique
+  status          String      @default("PENDING")
+  creditedAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([shopId, status])
+}
+
+model ShopTicketProduct {
+  id        String   @id @default(cuid())
+  shopId    String
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  productId String
+  createdAt DateTime @default(now())
+
+  @@unique([shopId, productId])
+}
+
+model OrderTicket {
+  id            String       @id @default(cuid())
+  shopId        String
+  shop          Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  orderId       String
+  orderName     String?
+  customerEmail String?
+  ticketId      String       @unique
+  qrCodeDataUrl String
+  checkedInAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  checkInEvents CheckInLog[]
+
+  @@unique([shopId, orderId])
+}
+
+model CheckInLog {
+  id            String      @id @default(cuid())
+  orderTicketId String
+  orderTicket   OrderTicket @relation(fields: [orderTicketId], references: [id], onDelete: Cascade)
+  scannedAt     DateTime    @default(now())
+  scannerId     String?
+  success       Boolean     @default(true)
+  note          String?
+}
+
+model WebhookDelivery {
+  id          String   @id @default(cuid())
+  shopDomain  String
+  topic       String
+  deliveryKey String
+  receivedAt  DateTime @default(now())
+
+  @@unique([shopDomain, topic, deliveryKey])
+}
+
+model PrivacyWebhookLog {
+  id          String   @id @default(cuid())
+  shopId      String?
+  shop        Shop?    @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  shopDomain  String
+  topic       String
+  payloadJson String
+  receivedAt  DateTime @default(now())
+}
