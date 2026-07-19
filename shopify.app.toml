@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "2cae84e40d8a52516744f379d6ab7edb"
-name = "FrontsideTex"
+name = "FrontsideTix"
 application_url = "https://shopify.dev/apps/default-app-home"
 embedded = true
 
