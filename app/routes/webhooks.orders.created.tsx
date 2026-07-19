@@ -47,10 +47,20 @@ const METAFIELDS_SET_MUTATION = `#graphql
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const eventId = request.headers.get("x-shopify-event-id");
-  const { shop: shopDomain, topic, payload, admin } =
-    await authenticate.webhook(request);
+  const {
+    shop: shopDomain,
+    topic,
+    payload,
+    admin,
+  } = await authenticate.webhook(request);
 
   const order = payload as ShopifyOrderPayload;
+  console.info("[webhook][orders/create] received", {
+    shopDomain,
+    topic,
+    eventId,
+    orderId: order.id,
+  });
   const deliveryKey = buildWebhookDeliveryKey(JSON.stringify(payload), eventId);
 
   const reserve = await reserveWebhookDelivery(db, {
@@ -67,6 +77,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const orderId = String(order.id);
     const orderEmail = resolveOrderEmail(order);
     const lineItems = order.line_items ?? [];
+
+    console.info("[webhook][orders/create] parsed order", {
+      shopDomain,
+      orderId,
+      hasEmail: Boolean(orderEmail),
+      lineItemCount: lineItems.length,
+    });
 
     // Only generate tickets when the order contains a configured ticket product.
     // If none are configured, every order generates a ticket (legacy behavior).
@@ -157,6 +174,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (orderEmail) {
       try {
+        console.info("[webhook][orders/create] sending ticket email", {
+          shopDomain,
+          orderId,
+          to: orderEmail,
+          ticketId: orderTicket.ticketId,
+        });
         const emailResult = await sendOrderTicketEmail({
           to: orderEmail,
           orderName: order.name,
@@ -167,11 +190,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           logoUrl: shopRecord.emailLogoUrl,
         });
         if (!emailResult.sent) {
-          console.warn("Order ticket email skipped", emailResult.reason, orderEmail);
+          console.warn(
+            "Order ticket email skipped",
+            emailResult.reason,
+            orderEmail,
+          );
+        } else {
+          console.info("[webhook][orders/create] ticket email sent", {
+            shopDomain,
+            orderId,
+            ticketId: orderTicket.ticketId,
+          });
         }
       } catch (error) {
         console.error("Failed to send order ticket email", error);
       }
+    } else {
+      console.warn(
+        "[webhook][orders/create] no email found on order; skipping send",
+        {
+          shopDomain,
+          orderId,
+        },
+      );
     }
 
     return new Response();
