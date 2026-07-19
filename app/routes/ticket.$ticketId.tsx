@@ -5,6 +5,12 @@ import db from "../db.server";
 import BrandHeader from "../components/BrandHeader";
 import brandStyles from "../styles/brand.css?url";
 
+const SHOPIFY_APP_HANDLE = "frontsidetix";
+
+function shopDomainToHandle(shopDomain: string) {
+  return shopDomain.replace(/\.myshopify\.com$/i, "");
+}
+
 export const links: LinksFunction = () => [
   { rel: "stylesheet", href: brandStyles },
 ];
@@ -44,7 +50,7 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
       checkedIn: Boolean(ticket.checkedInAt),
       shopDomain,
       checkInHref: shopDomain
-        ? `/app/check-in?ticketId=${encodeURIComponent(ticket.ticketId)}&shop=${encodeURIComponent(shopDomain)}`
+        ? `https://admin.shopify.com/store/${encodeURIComponent(shopDomainToHandle(shopDomain))}/apps/${SHOPIFY_APP_HANDLE}/app/check-in?ticketId=${encodeURIComponent(ticket.ticketId)}`
         : `/app/check-in?ticketId=${encodeURIComponent(ticket.ticketId)}`,
     },
   };
@@ -64,6 +70,8 @@ export default function TicketPage() {
 
         <a
           href={ticket.checkInHref}
+          target="_top"
+          rel="noreferrer"
           className="inline-flex items-center justify-center rounded-full bg-black px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90"
         >
           Staff check-in
