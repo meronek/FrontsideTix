@@ -34,6 +34,23 @@ const PRODUCTS_BY_IDS_QUERY = `#graphql
     }
   }`;
 
+function throwIfAccessDenied(json: unknown) {
+  const errors =
+    typeof json === "object" && json !== null && "errors" in json
+      ? (json as { errors?: Array<{ message?: string }> }).errors
+      : undefined;
+
+  const accessDenied = (errors ?? []).some((err) =>
+    (err.message ?? "").toLowerCase().includes("access denied"),
+  );
+
+  if (accessDenied) {
+    throw new Error(
+      "Access denied for products field. This app must be granted the read_products scope. Run `shopify app deploy` and reinstall/re-auth the app in the store.",
+    );
+  }
+}
+
 export async function fetchTicketProducts(
   admin: AdminGraphqlClient,
   selectedIds: string[],
@@ -43,6 +60,7 @@ export async function fetchTicketProducts(
       variables: { first: 250 },
     });
     const json = (await resp.json()) as {
+      errors?: Array<{ message?: string }>;
       data?: {
         products?: {
           nodes?: Array<{
@@ -53,6 +71,7 @@ export async function fetchTicketProducts(
         };
       };
     };
+    throwIfAccessDenied(json);
     return (json.data?.products?.nodes ?? []).map((p) => ({
       id: String(p.legacyResourceId),
       title: p.title ?? "Untitled product",
@@ -69,6 +88,7 @@ export async function fetchTicketProducts(
       variables: { ids: chunk },
     });
     const json = (await resp.json()) as {
+      errors?: Array<{ message?: string }>;
       data?: {
         nodes?: Array<{
           legacyResourceId?: string;
@@ -77,6 +97,7 @@ export async function fetchTicketProducts(
         } | null>;
       };
     };
+    throwIfAccessDenied(json);
     for (const node of json.data?.nodes ?? []) {
       if (node?.legacyResourceId) {
         results.push({
