@@ -2,7 +2,7 @@
 
 client_id = "2cae84e40d8a52516744f379d6ab7edb"
 name = "FrontsideTix"
-application_url = "https://shopify.dev/apps/default-app-home"
+application_url = "https://www.frontsidetix.com"
 embedded = true
 
 [build]
