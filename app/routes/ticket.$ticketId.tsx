@@ -11,11 +11,14 @@ export const links: LinksFunction = () => [
 
 // Public ticket view — the QR code target. No Shopify auth: the ticketId itself
 // is a hard-to-guess capability token.
-export const loader = async ({ params }: LoaderFunctionArgs) => {
+export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   const ticketId = params.ticketId;
   if (!ticketId) {
     throw new Response("Not found", { status: 404 });
   }
+
+  const requestUrl = new URL(request.url);
+  const shopDomain = requestUrl.searchParams.get("shop")?.trim() ?? "";
 
   const ticket = await db.orderTicket.findUnique({
     where: { ticketId },
@@ -39,6 +42,10 @@ export const loader = async ({ params }: LoaderFunctionArgs) => {
       orderName: ticket.orderName,
       customerEmail: ticket.customerEmail,
       checkedIn: Boolean(ticket.checkedInAt),
+      shopDomain,
+      checkInHref: shopDomain
+        ? `/app/check-in?ticketId=${encodeURIComponent(ticket.ticketId)}&shop=${encodeURIComponent(shopDomain)}`
+        : `/app/check-in?ticketId=${encodeURIComponent(ticket.ticketId)}`,
     },
   };
 };
@@ -54,6 +61,13 @@ export default function TicketPage() {
         <p className="text-center text-brand-subtext">
           Show this QR code at the event entrance for verification and check-in.
         </p>
+
+        <a
+          href={ticket.checkInHref}
+          className="inline-flex items-center justify-center rounded-full bg-black px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+        >
+          Staff check-in
+        </a>
 
         {/* Data URL is generated server-side and stored per order. */}
         <img

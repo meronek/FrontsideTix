@@ -11,12 +11,11 @@ export function buildCheckInUrl(ticketId: string, shopDomain?: string) {
   const baseUrl = (
     process.env.SHOPIFY_APP_URL ?? "http://localhost:3000"
   ).replace(/\/$/, "");
-  // QR scans should land on the staff check-in workflow. This route is admin-
-  // protected via authenticate.admin(), so unauthenticated users are forced
-  // through Shopify auth before they can check in a ticket.
-  let url = `${baseUrl}/app/check-in?ticketId=${encodeURIComponent(ticketId)}`;
+  // QR scans should land on the public ticket page first. That page can then
+  // offer a staff-only check-in link for logged-in admins.
+  let url = `${baseUrl}/ticket/${encodeURIComponent(ticketId)}`;
   if (shopDomain) {
-    url += `&shop=${encodeURIComponent(shopDomain)}`;
+    url += `?shop=${encodeURIComponent(shopDomain)}`;
   }
   return url;
 }
