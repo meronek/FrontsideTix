@@ -68,15 +68,6 @@ export default function TicketPage() {
           Show this QR code at the event entrance for verification and check-in.
         </p>
 
-        <a
-          href={ticket.checkInHref}
-          target="_top"
-          rel="noreferrer"
-          className="inline-flex items-center justify-center rounded-full bg-black px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90"
-        >
-          Staff check-in
-        </a>
-
         {/* Data URL is generated server-side and stored per order. */}
         <img
           src={ticket.qrCodeDataUrl}
