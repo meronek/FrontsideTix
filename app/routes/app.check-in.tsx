@@ -18,7 +18,7 @@ import db from "../db.server";
 import { getOrCreateShop } from "../lib/shop.server";
 import { consumeTicketCreditInTx } from "../lib/billing";
 import { createMobileCheckInToken } from "../lib/mobile-checkin-token.server";
-import { extractTicketIdFromQrData } from "../lib/tickets";
+import { extractTicketIdFromQrData } from "../lib/ticket-id";
 import {
   fetchOrderLineItems,
   type OrderLineItemsInfo,

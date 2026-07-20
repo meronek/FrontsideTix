@@ -13,7 +13,7 @@ import {
   verifyMobileCheckInToken,
   type MobileCheckInTokenPayload,
 } from "../lib/mobile-checkin-token.server";
-import { extractTicketIdFromQrData } from "../lib/tickets";
+import { extractTicketIdFromQrData } from "../lib/ticket-id";
 import BrandHeader from "../components/BrandHeader";
 import brandStyles from "../styles/brand.css?url";
 
