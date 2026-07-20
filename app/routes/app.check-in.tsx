@@ -57,6 +57,7 @@ function extractTicketIdFromQrData(rawValue: string) {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop);
+  const appBaseUrl = (process.env.SHOPIFY_APP_URL ?? "").replace(/\/$/, "");
 
   const [recentCheckInRows, recentTicketRows] = await Promise.all([
     db.checkInLog.findMany({
@@ -134,7 +135,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     };
   });
 
-  return { recentCheckIns, recentTicketOrders };
+  return {
+    recentCheckIns,
+    recentTicketOrders,
+    mobileScannerUrl: appBaseUrl
+      ? `${appBaseUrl}/check-in/mobile`
+      : "/check-in/mobile",
+  };
 };
 
 type SearchResult = {
@@ -500,7 +507,8 @@ function formatTicketHolderLabel(
 }
 
 export default function CheckInPage() {
-  const { recentCheckIns, recentTicketOrders } = useLoaderData<typeof loader>();
+  const { recentCheckIns, recentTicketOrders, mobileScannerUrl } =
+    useLoaderData<typeof loader>();
   const ticketFetcher = useFetcher<typeof action>();
   const searchFetcher = useFetcher<typeof action>();
   const revalidator = useRevalidator();
@@ -760,6 +768,34 @@ export default function CheckInPage() {
 
   return (
     <s-page heading="Event check-in">
+      <s-section heading="Staff mobile scanner">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+            Staff
+          </p>
+          <h2 className="mt-2 text-3xl font-semibold leading-tight text-emerald-950">
+            Open QR Code Ticket Scanner
+          </h2>
+          <p className="mt-3 max-w-2xl text-sm text-emerald-900/80">
+            Use this to test whether Shopify opens a standalone scanner route in
+            the phone&apos;s browser instead of staying inside the embedded app.
+          </p>
+          <div className="mt-4">
+            <a
+              href={mobileScannerUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center rounded-full bg-emerald-700 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800"
+            >
+              Open QR Code Ticket Scanner
+            </a>
+          </div>
+          <p className="mt-3 text-xs text-emerald-900/70">
+            Test URL: {mobileScannerUrl}
+          </p>
+        </div>
+      </s-section>
+
       <s-section heading="Ticket details">
         <s-banner tone={status.tone}>
           <s-paragraph>{status.text}</s-paragraph>
