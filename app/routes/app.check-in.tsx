@@ -786,44 +786,48 @@ export default function CheckInPage() {
               </h2>
               <div className="mt-4 grid gap-2 text-sm text-neutral-700 sm:grid-cols-3">
                 <p>
-                  <strong>Ticket:</strong> {result.ticket.ticketId}
-                </p>
-                <p>
                   <strong>Order:</strong> {result.ticket.orderName ?? "Unknown"}
-                </p>
-                <p>
-                  <strong>Email:</strong>{" "}
-                  {result.ticket.customerEmail ?? "Unknown"}
+                  , {result.ticket.ticketId},{" "}
+                  {result.ticket.customerEmail ?? " Email Unknown"}
                 </p>
               </div>
             </div>
 
             {result.ticket.lineItems.length > 0 ? (
-              <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
-                <div className="grid grid-cols-[minmax(0,1fr)_72px_120px] gap-3 border-b border-black/10 bg-neutral-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  <span>Item</span>
-                  <span className="text-right">Qty</span>
-                  <span className="text-right">Price</span>
-                </div>
-                <div className="divide-y divide-black/10">
-                  {result.ticket.lineItems.map((item, i) => (
-                    <div
-                      key={`${item.title}-${i}`}
-                      className="grid grid-cols-[minmax(0,1fr)_72px_120px] gap-3 px-4 py-3 text-sm text-neutral-800"
-                    >
-                      <span className="font-medium">{item.title}</span>
-                      <span className="text-right tabular-nums">
-                        {item.quantity}
-                      </span>
-                      <span className="text-right tabular-nums">
-                        {formatPrice(
-                          item.price,
-                          result.ticket?.currency ?? null,
-                        )}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+              <div className="w-full overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
+                <table className="w-full table-fixed border-collapse text-sm text-neutral-800">
+                  <colgroup>
+                    <col className="w-auto" />
+                    <col className="w-20" />
+                    <col className="w-32" />
+                  </colgroup>
+                  <thead className="bg-neutral-50">
+                    <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      <th className="px-5 py-3 text-left">Item</th>
+                      <th className="px-5 py-3 text-right">Qty</th>
+                      <th className="px-5 py-3 text-right">Price</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.ticket.lineItems.map((item, i) => (
+                      <tr
+                        key={`${item.title}-${i}`}
+                        className="border-b border-black/10 last:border-b-0"
+                      >
+                        <td className="px-5 py-3 font-medium">{item.title}</td>
+                        <td className="px-5 py-3 text-right tabular-nums">
+                          {item.quantity}
+                        </td>
+                        <td className="px-5 py-3 text-right tabular-nums">
+                          {formatPrice(
+                            item.price,
+                            result.ticket?.currency ?? null,
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : null}
             {resolvedCheckedInAt ? (
@@ -846,13 +850,14 @@ export default function CheckInPage() {
               }
             />
             {canCheckIn ? (
-              <s-button
-                variant="primary"
+              <button
+                type="button"
                 onClick={checkIn}
-                {...(lookupLoading ? { loading: true } : {})}
+                disabled={lookupLoading}
+                className="inline-flex min-h-10 items-center justify-center rounded-full bg-emerald-700 px-5 py-2 text-sm font-semibold text-white transition enabled:hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Check in
-              </s-button>
+                {lookupLoading ? "Checking in..." : "Check in"}
+              </button>
             ) : canUpdateNote ? (
               <s-button
                 onClick={checkIn}

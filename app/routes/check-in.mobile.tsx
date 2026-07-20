@@ -15,6 +15,7 @@ import {
 } from "../lib/mobile-checkin-token.server";
 import { extractTicketIdFromQrData } from "../lib/ticket-id";
 import BrandHeader from "../components/BrandHeader";
+// eslint-disable-next-line import/no-unresolved
 import brandStyles from "../styles/brand.css?url";
 
 const OUT_OF_CREDITS_MESSAGE =
