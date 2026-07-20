@@ -17,6 +17,8 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getOrCreateShop } from "../lib/shop.server";
 import { consumeTicketCreditInTx } from "../lib/billing";
+import { createMobileCheckInToken } from "../lib/mobile-checkin-token.server";
+import { extractTicketIdFromQrData } from "../lib/tickets";
 import {
   fetchOrderLineItems,
   type OrderLineItemsInfo,
@@ -28,36 +30,14 @@ const OUT_OF_CREDITS_MESSAGE =
   "You have run out of ticket credits, buy more now to continue checking your customers in.";
 const SCANNER_REGION_ID = "ticket-qr-scanner-region";
 
-function extractTicketIdFromQrData(rawValue: string) {
-  const trimmed = rawValue.trim();
-  if (!trimmed) return null;
-
-  if (/^TKT_[A-Za-z0-9_-]+$/.test(trimmed)) {
-    return trimmed;
-  }
-
-  try {
-    const url = new URL(trimmed);
-    const ticketIdFromQuery = url.searchParams.get("ticketId")?.trim();
-    if (ticketIdFromQuery) {
-      return ticketIdFromQuery;
-    }
-
-    const match = url.pathname.match(/\/ticket\/([^/]+)/);
-    if (match?.[1]) {
-      return decodeURIComponent(match[1]);
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop);
   const appBaseUrl = (process.env.SHOPIFY_APP_URL ?? "").replace(/\/$/, "");
+  const mobileToken = createMobileCheckInToken({
+    shopId: shop.id,
+    shopDomain: session.shop,
+  });
 
   const [recentCheckInRows, recentTicketRows] = await Promise.all([
     db.checkInLog.findMany({
@@ -139,8 +119,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     recentCheckIns,
     recentTicketOrders,
     mobileScannerUrl: appBaseUrl
-      ? `${appBaseUrl}/check-in/mobile`
-      : "/check-in/mobile",
+      ? `${appBaseUrl}/check-in/mobile?t=${encodeURIComponent(mobileToken)}`
+      : `/check-in/mobile?t=${encodeURIComponent(mobileToken)}`,
   };
 };
 
@@ -769,30 +749,24 @@ export default function CheckInPage() {
   return (
     <s-page heading="Event check-in">
       <s-section heading="Staff mobile scanner">
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
             Staff
           </p>
           <h2 className="mt-2 text-3xl font-semibold leading-tight text-emerald-950">
-            Open QR Code Ticket Scanner
+            QR Code Ticket Scanner
           </h2>
-          <p className="mt-3 max-w-2xl text-sm text-emerald-900/80">
-            Use this to test whether Shopify opens a standalone scanner route in
-            the phone&apos;s browser instead of staying inside the embedded app.
-          </p>
-          <div className="mt-4">
+
+          <div className="mt-5 flex justify-center">
             <a
               href={mobileScannerUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center justify-center rounded-full bg-emerald-700 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800"
+              className="inline-flex min-h-12 items-center justify-center rounded-full bg-emerald-700 px-8 py-3 text-base font-semibold text-white no-underline shadow-md transition hover:bg-emerald-800 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
             >
               Open QR Code Ticket Scanner
             </a>
           </div>
-          <p className="mt-3 text-xs text-emerald-900/70">
-            Test URL: {mobileScannerUrl}
-          </p>
         </div>
       </s-section>
 
