@@ -363,7 +363,15 @@ function formatLocalDate(value: string | null | undefined) {
   if (!value) return "-";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
+  return `${new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "UTC",
+  }).format(parsed)} UTC`;
 }
 
 export default function MobileCheckInPage() {
@@ -422,20 +430,29 @@ export default function MobileCheckInPage() {
   const closeScanner = useCallback(() => {
     const activeScanner = scannerRef.current;
     scannerRef.current = null;
-    if (activeScanner) {
-      void activeScanner
-        .stop()
-        .catch(() => undefined)
-        .finally(() => {
-          try {
-            activeScanner.clear();
-          } catch {
-            // no-op
-          }
-        });
-    }
     setScannerOpen(false);
     setScannerStarting(false);
+
+    if (!activeScanner) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const scannerState = activeScanner.getState?.();
+        if (scannerState === 2 || scannerState === 3) {
+          await activeScanner.stop();
+        }
+      } catch {
+        // no-op
+      } finally {
+        try {
+          activeScanner.clear();
+        } catch {
+          // no-op
+        }
+      }
+    })();
   }, []);
 
   const handleDecodedTicket = useCallback(
@@ -555,16 +572,22 @@ export default function MobileCheckInPage() {
     return () => {
       cancelled = true;
       if (scanner) {
-        void scanner
-          .stop()
-          .catch(() => undefined)
-          .finally(() => {
+        void (async () => {
+          try {
+            const scannerState = scanner?.getState?.();
+            if (scannerState === 2 || scannerState === 3) {
+              await scanner?.stop();
+            }
+          } catch {
+            // no-op
+          } finally {
             try {
               scanner?.clear();
             } catch {
               // no-op
             }
-          });
+          }
+        })();
         if (scannerRef.current === scanner) {
           scannerRef.current = null;
         }
