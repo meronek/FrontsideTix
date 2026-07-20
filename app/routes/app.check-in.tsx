@@ -1,6 +1,5 @@
 import type { ChangeEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type QrScanner from "qr-scanner";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -27,6 +26,7 @@ type LineItem = { title: string; quantity: number; price: string };
 
 const OUT_OF_CREDITS_MESSAGE =
   "You have run out of ticket credits, buy more now to continue checking your customers in.";
+const SCANNER_REGION_ID = "ticket-qr-scanner-region";
 
 function extractTicketIdFromQrData(rawValue: string) {
   const trimmed = rawValue.trim();
@@ -481,6 +481,24 @@ function formatLocalDate(value: string | null | undefined) {
   return parsed.toLocaleString();
 }
 
+function formatTicketHolderLabel(
+  customerEmail: string | null,
+  orderName: string | null,
+) {
+  if (customerEmail) {
+    const localPart = customerEmail.split("@")[0] ?? "";
+    const normalized = localPart
+      .replace(/[._-]+/g, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+    if (normalized) {
+      return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+  }
+
+  return orderName ?? "Ticket Holder";
+}
+
 export default function CheckInPage() {
   const { recentCheckIns, recentTicketOrders } = useLoaderData<typeof loader>();
   const ticketFetcher = useFetcher<typeof action>();
@@ -496,9 +514,8 @@ export default function CheckInPage() {
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [scannerStarting, setScannerStarting] = useState(false);
   const [photoScanLoading, setPhotoScanLoading] = useState(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const scannerRef = useRef<QrScanner | null>(null);
+  const scannerRef = useRef<import("html5-qrcode").Html5Qrcode | null>(null);
 
   const result =
     ticketFetcher.data &&
@@ -536,9 +553,20 @@ export default function CheckInPage() {
   }, [note, ticketFetcher, ticketId]);
 
   const closeScanner = useCallback(() => {
-    scannerRef.current?.stop();
-    scannerRef.current?.destroy();
+    const activeScanner = scannerRef.current;
     scannerRef.current = null;
+    if (activeScanner) {
+      void activeScanner
+        .stop()
+        .catch(() => undefined)
+        .finally(() => {
+          try {
+            activeScanner.clear();
+          } catch {
+            // no-op
+          }
+        });
+    }
     setScannerOpen(false);
     setScannerStarting(false);
   }, []);
@@ -568,11 +596,29 @@ export default function CheckInPage() {
       setPhotoScanLoading(true);
       setScannerError(null);
       try {
-        const { default: QrScanner } = await import("qr-scanner");
-        const result = await QrScanner.scanImage(file, {
-          returnDetailedScanResult: true,
+        const { Html5Qrcode } = await import("html5-qrcode");
+        const tempRegionId = `${SCANNER_REGION_ID}-file`;
+        const tempNode = document.createElement("div");
+        tempNode.id = tempRegionId;
+        tempNode.style.display = "none";
+        document.body.appendChild(tempNode);
+
+        const fileScanner = new Html5Qrcode(tempRegionId, {
+          formatsToSupport: [],
+          verbose: false,
         });
-        handleDecodedTicket(result.data);
+
+        try {
+          const decodedText = await fileScanner.scanFile(file, false);
+          handleDecodedTicket(decodedText);
+        } finally {
+          try {
+            fileScanner.clear();
+          } catch {
+            // no-op
+          }
+          tempNode.remove();
+        }
       } catch (error) {
         setScannerError(
           error instanceof Error
@@ -603,47 +649,43 @@ export default function CheckInPage() {
   }, [ticketIdFromQuery]);
 
   useEffect(() => {
-    if (!scannerOpen || !videoRef.current) {
+    if (!scannerOpen) {
       return;
     }
 
     let cancelled = false;
-    let scanner: QrScanner | null = null;
+    let scanner: import("html5-qrcode").Html5Qrcode | null = null;
 
     setScannerError(null);
     setScannerStarting(true);
 
     void (async () => {
       try {
-        const { default: QrScanner } = await import("qr-scanner");
-        const hasCamera = await QrScanner.hasCamera();
-        if (!hasCamera) {
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } =
+          await import("html5-qrcode");
+        const cameras = await Html5Qrcode.getCameras();
+        if (!cameras.length) {
           throw new Error("No camera was found on this device.");
         }
-        if (cancelled || !videoRef.current) return;
+        if (cancelled) return;
 
-        scanner = new QrScanner(
-          videoRef.current,
-          (result) => handleDecodedTicket(result.data),
-          {
-            preferredCamera: "environment",
-            highlightScanRegion: true,
-            highlightCodeOutline: true,
-            returnDetailedScanResult: true,
-            onDecodeError: (error) => {
-              if (`${error}` !== "No QR code found") {
-                setScannerError(
-                  error instanceof Error
-                    ? error.message
-                    : "Unable to scan the QR code.",
-                );
-              }
-            },
-          },
-        );
+        scanner = new Html5Qrcode(SCANNER_REGION_ID, {
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+          verbose: false,
+          useBarCodeDetectorIfSupported: true,
+        });
 
         scannerRef.current = scanner;
-        await scanner.start();
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: { width: 260, height: 260 },
+            aspectRatio: 1,
+          },
+          (decodedText) => handleDecodedTicket(decodedText),
+          () => undefined,
+        );
 
         if (!cancelled) {
           setScannerStarting(false);
@@ -661,10 +703,20 @@ export default function CheckInPage() {
 
     return () => {
       cancelled = true;
-      scanner?.stop();
-      scanner?.destroy();
-      if (scannerRef.current === scanner) {
-        scannerRef.current = null;
+      if (scanner) {
+        void scanner
+          .stop()
+          .catch(() => undefined)
+          .finally(() => {
+            try {
+              scanner?.clear();
+            } catch {
+              // no-op
+            }
+          });
+        if (scannerRef.current === scanner) {
+          scannerRef.current = null;
+        }
       }
     };
   }, [handleDecodedTicket, scannerOpen]);
@@ -699,6 +751,13 @@ export default function CheckInPage() {
     };
   }, [result, resolvedCheckedInAt]);
 
+  const ticketHolderLabel = result?.ticket
+    ? formatTicketHolderLabel(
+        result.ticket.customerEmail ?? null,
+        result.ticket.orderName ?? null,
+      )
+    : null;
+
   return (
     <s-page heading="Event check-in">
       <s-section heading="Ticket details">
@@ -708,24 +767,54 @@ export default function CheckInPage() {
 
         {result?.ticket ? (
           <s-stack direction="block" gap="small-300">
-            <s-text>
-              <strong>Ticket:</strong> {result.ticket.ticketId}
-            </s-text>
-            <s-text>
-              <strong>Order:</strong> {result.ticket.orderName ?? "Unknown"}
-            </s-text>
-            <s-text>
-              <strong>Email:</strong> {result.ticket.customerEmail ?? "Unknown"}
-            </s-text>
+            <div className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
+                Ready To Check In
+              </p>
+              <h2 className="mt-2 text-3xl font-semibold leading-tight text-neutral-950">
+                Check In {ticketHolderLabel}
+              </h2>
+              <div className="mt-4 grid gap-2 text-sm text-neutral-700 sm:grid-cols-3">
+                <p>
+                  <strong>Ticket:</strong> {result.ticket.ticketId}
+                </p>
+                <p>
+                  <strong>Order:</strong> {result.ticket.orderName ?? "Unknown"}
+                </p>
+                <p>
+                  <strong>Email:</strong>{" "}
+                  {result.ticket.customerEmail ?? "Unknown"}
+                </p>
+              </div>
+            </div>
+
             {result.ticket.lineItems.length > 0 ? (
-              <s-stack direction="block" gap="small-500">
-                {result.ticket.lineItems.map((item, i) => (
-                  <s-text key={i}>
-                    {item.title} ×{item.quantity} ·{" "}
-                    {formatPrice(item.price, result.ticket?.currency ?? null)}
-                  </s-text>
-                ))}
-              </s-stack>
+              <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
+                <div className="grid grid-cols-[minmax(0,1fr)_72px_120px] gap-3 border-b border-black/10 bg-neutral-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  <span>Item</span>
+                  <span className="text-right">Qty</span>
+                  <span className="text-right">Price</span>
+                </div>
+                <div className="divide-y divide-black/10">
+                  {result.ticket.lineItems.map((item, i) => (
+                    <div
+                      key={`${item.title}-${i}`}
+                      className="grid grid-cols-[minmax(0,1fr)_72px_120px] gap-3 px-4 py-3 text-sm text-neutral-800"
+                    >
+                      <span className="font-medium">{item.title}</span>
+                      <span className="text-right tabular-nums">
+                        {item.quantity}
+                      </span>
+                      <span className="text-right tabular-nums">
+                        {formatPrice(
+                          item.price,
+                          result.ticket?.currency ?? null,
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : null}
             {resolvedCheckedInAt ? (
               <s-text>
@@ -879,14 +968,14 @@ export default function CheckInPage() {
                 Point your camera at a ticket QR code. The ticket will load
                 automatically when detected.
               </s-paragraph>
-              <video
-                ref={videoRef}
-                muted
-                playsInline
+              <div
+                id={SCANNER_REGION_ID}
                 style={{
                   width: "100%",
                   maxWidth: "420px",
+                  minHeight: "320px",
                   borderRadius: "12px",
+                  overflow: "hidden",
                   background: "#000",
                 }}
               />
