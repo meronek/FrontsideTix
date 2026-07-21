@@ -14,6 +14,8 @@ import {
   type MobileCheckInTokenPayload,
 } from "../lib/mobile-checkin-token.server";
 import { extractTicketIdFromQrData } from "../lib/ticket-id";
+import { unauthenticated } from "../shopify.server";
+import { fetchOrderCustomerDetails } from "../lib/shopify-data.server";
 import BrandHeader from "../components/BrandHeader";
 // eslint-disable-next-line import/no-unresolved
 import brandStyles from "../styles/brand.css?url";
@@ -39,6 +41,12 @@ type TicketView = {
   ticketId: string;
   orderName: string | null;
   customerEmail: string | null;
+  customerFirstName: string | null;
+  customerLastName: string | null;
+  customerFullName: string | null;
+  customerPhone: string | null;
+  shippingAddress: string | null;
+  billingAddress: string | null;
   checkedInAt: string | null;
 };
 
@@ -135,6 +143,16 @@ export const action = async ({
 
   const { shopId, shopDomain } = authorized.payload;
 
+  const fetchCustomerDetails = async (orderId: string) => {
+    try {
+      const { admin } = await unauthenticated.admin(shopDomain);
+      const customerInfo = await fetchOrderCustomerDetails(admin, [orderId]);
+      return customerInfo.get(orderId) ?? null;
+    } catch {
+      return null;
+    }
+  };
+
   if (intent === "lookup") {
     const ticketId = String(formData.get("ticketId") ?? "").trim();
     if (!ticketId) {
@@ -151,9 +169,16 @@ export const action = async ({
       select: {
         shopId: true,
         ticketId: true,
+        orderId: true,
         orderName: true,
         customerEmail: true,
         checkedInAt: true,
+        checkInEvents: {
+          where: { success: true },
+          orderBy: { scannedAt: "desc" },
+          take: 1,
+          select: { note: true },
+        },
       },
     });
 
@@ -167,13 +192,22 @@ export const action = async ({
       };
     }
 
+    const customerDetails = await fetchCustomerDetails(ticket.orderId);
+
     return {
       intent,
       valid: true,
+      checkInNote: ticket.checkInEvents[0]?.note ?? null,
       ticket: {
         ticketId: ticket.ticketId,
         orderName: ticket.orderName,
         customerEmail: ticket.customerEmail,
+        customerFirstName: customerDetails?.firstName ?? null,
+        customerLastName: customerDetails?.lastName ?? null,
+        customerFullName: customerDetails?.fullName ?? null,
+        customerPhone: customerDetails?.phone ?? null,
+        shippingAddress: customerDetails?.shippingAddress ?? null,
+        billingAddress: customerDetails?.billingAddress ?? null,
         checkedInAt: ticket.checkedInAt?.toISOString() ?? null,
       },
     };
@@ -189,6 +223,7 @@ export const action = async ({
         id: true,
         shopId: true,
         ticketId: true,
+        orderId: true,
         orderName: true,
         customerEmail: true,
         checkedInAt: true,
@@ -204,6 +239,8 @@ export const action = async ({
           "Invalid ticket scan. This code does not match a valid ticket.",
       };
     }
+
+    const customerDetails = await fetchCustomerDetails(ticket.orderId);
 
     const scannerId = `mobile:${shopDomain}`;
     const now = new Date();
@@ -290,6 +327,12 @@ export const action = async ({
       ticketId: ticket.ticketId,
       orderName: ticket.orderName,
       customerEmail: ticket.customerEmail,
+      customerFirstName: customerDetails?.firstName ?? null,
+      customerLastName: customerDetails?.lastName ?? null,
+      customerFullName: customerDetails?.fullName ?? null,
+      customerPhone: customerDetails?.phone ?? null,
+      shippingAddress: customerDetails?.shippingAddress ?? null,
+      billingAddress: customerDetails?.billingAddress ?? null,
       checkedInAt: ticket.checkedInAt?.toISOString() ?? null,
     };
 
@@ -372,6 +415,23 @@ function formatLocalDate(value: string | null | undefined) {
     hour12: true,
     timeZone: "UTC",
   }).format(parsed)} UTC`;
+}
+
+function formatLocalStatusDate(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+
+  const monthDay = parsed.toLocaleDateString(undefined, {
+    month: "numeric",
+    day: "numeric",
+  });
+  const time = parsed.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${monthDay} ${time}`;
 }
 
 export default function MobileCheckInPage() {
@@ -599,14 +659,19 @@ export default function MobileCheckInPage() {
     if (!actionResult) {
       return "Scan or enter a ticket ID to load details.";
     }
-    return (
-      actionResult.message ??
-      (actionResult.valid
-        ? resolvedCheckedInAt
-          ? "Ticket already checked in."
-          : "Ticket is valid. Ready to check in."
-        : "Invalid ticket.")
-    );
+    if (actionResult.message) {
+      return actionResult.message;
+    }
+    if (actionResult.valid && resolvedCheckedInAt) {
+      const localCheckIn = formatLocalStatusDate(resolvedCheckedInAt);
+      return localCheckIn
+        ? `Checked in on ${localCheckIn}`
+        : "Ticket already checked in.";
+    }
+    if (actionResult.valid) {
+      return "Ticket is valid. Ready to check in.";
+    }
+    return "Invalid ticket.";
   }, [actionResult, resolvedCheckedInAt]);
 
   useEffect(() => {
@@ -738,20 +803,34 @@ export default function MobileCheckInPage() {
               Ticket
             </p>
             <h2 className="mt-2 text-2xl font-semibold text-neutral-950">
-              {actionResult.ticket.orderName ?? "Unknown order"}
+              {actionResult.ticket.orderName ?? "Unknown order"}:
+              {actionResult.ticket.customerFullName ??
+                `${actionResult.ticket.customerFirstName ?? ""} ${actionResult.ticket.customerLastName ?? ""}`.trim()}
             </h2>
             <div className="mt-3 space-y-1 text-sm text-neutral-700">
               <p>
-                <strong>Ticket:</strong> {actionResult.ticket.ticketId}
+                <strong>TicketID:</strong> {actionResult.ticket.ticketId},{" "}
               </p>
               <p>
                 <strong>Email:</strong>{" "}
                 {actionResult.ticket.customerEmail ?? "Unknown"}
               </p>
+
+              {actionResult.ticket.shippingAddress ? (
+                <p>
+                  <strong>Shipping:</strong>{" "}
+                  {actionResult.ticket.shippingAddress}
+                </p>
+              ) : null}
+              {actionResult.ticket.billingAddress ? (
+                <p>
+                  <strong>Billing:</strong> {actionResult.ticket.billingAddress}
+                </p>
+              ) : null}
               <p>
                 <strong>Status:</strong>{" "}
                 {resolvedCheckedInAt
-                  ? `Checked in at ${formatLocalDate(resolvedCheckedInAt)}`
+                  ? `Checked in on ${formatLocalStatusDate(resolvedCheckedInAt)}`
                   : "Ready to check in"}
               </p>
             </div>

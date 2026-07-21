@@ -199,6 +199,16 @@ export type OrderLineItemsInfo = {
   lineItems: Array<{ title: string; quantity: number; price: string }>;
 };
 
+export type OrderCustomerDetailsInfo = {
+  firstName: string | null;
+  lastName: string | null;
+  fullName: string | null;
+  email: string | null;
+  phone: string | null;
+  shippingAddress: string | null;
+  billingAddress: string | null;
+};
+
 const ORDER_LINE_ITEMS_QUERY = `#graphql
   query OrderLineItems($ids: [ID!]!) {
     nodes(ids: $ids) {
@@ -215,6 +225,45 @@ const ORDER_LINE_ITEMS_QUERY = `#graphql
       }
     }
   }`;
+
+const ORDER_CUSTOMER_DETAILS_QUERY = `#graphql
+  query OrderCustomerDetails($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      ... on Order {
+        legacyResourceId
+        customer {
+          firstName
+          lastName
+          displayName
+          email
+          phone
+        }
+        shippingAddress {
+          address1
+          address2
+          city
+          province
+          zip
+          country
+        }
+        billingAddress {
+          address1
+          address2
+          city
+          province
+          zip
+          country
+        }
+      }
+    }
+  }`;
+
+function compactAddress(parts: Array<string | null | undefined>) {
+  const filtered = parts
+    .map((part) => (part ?? "").trim())
+    .filter((part) => Boolean(part));
+  return filtered.length ? filtered.join(", ") : null;
+}
 
 // Looks up line items + currency for a set of numeric order ids. Used to enrich
 // the check-in search results and activity feed.
@@ -261,5 +310,97 @@ export async function fetchOrderLineItems(
       }
     }
   }
+  return map;
+}
+
+// Looks up customer and address context for a set of numeric order ids.
+// If protected customer data is unavailable for the app/store, this returns
+// an empty map instead of throwing so check-in search remains functional.
+export async function fetchOrderCustomerDetails(
+  admin: AdminGraphqlClient,
+  orderIds: string[],
+): Promise<Map<string, OrderCustomerDetailsInfo>> {
+  const map = new Map<string, OrderCustomerDetailsInfo>();
+  const uniqueIds = [...new Set(orderIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return map;
+
+  for (let i = 0; i < uniqueIds.length; i += 100) {
+    const chunk = uniqueIds
+      .slice(i, i + 100)
+      .map((id) => `gid://shopify/Order/${id}`);
+    const resp = await admin.graphql(ORDER_CUSTOMER_DETAILS_QUERY, {
+      variables: { ids: chunk },
+    });
+    const json = (await resp.json()) as {
+      errors?: Array<{ message?: string }>;
+      data?: {
+        nodes?: Array<{
+          legacyResourceId?: string;
+          customer?: {
+            firstName?: string | null;
+            lastName?: string | null;
+            displayName?: string | null;
+            email?: string | null;
+            phone?: string | null;
+          } | null;
+          shippingAddress?: {
+            address1?: string | null;
+            address2?: string | null;
+            city?: string | null;
+            province?: string | null;
+            zip?: string | null;
+            country?: string | null;
+          } | null;
+          billingAddress?: {
+            address1?: string | null;
+            address2?: string | null;
+            city?: string | null;
+            province?: string | null;
+            zip?: string | null;
+            country?: string | null;
+          } | null;
+        } | null>;
+      };
+    };
+
+    const hasAccessDenied = (json.errors ?? []).some((err) => {
+      const message = (err.message ?? "").toLowerCase();
+      return (
+        message.includes("access denied") ||
+        message.includes("protected customer data")
+      );
+    });
+    if (hasAccessDenied) {
+      return new Map<string, OrderCustomerDetailsInfo>();
+    }
+
+    for (const node of json.data?.nodes ?? []) {
+      if (!node?.legacyResourceId) continue;
+      map.set(String(node.legacyResourceId), {
+        firstName: node.customer?.firstName ?? null,
+        lastName: node.customer?.lastName ?? null,
+        fullName: node.customer?.displayName ?? null,
+        email: node.customer?.email ?? null,
+        phone: node.customer?.phone ?? null,
+        shippingAddress: compactAddress([
+          node.shippingAddress?.address1,
+          node.shippingAddress?.address2,
+          node.shippingAddress?.city,
+          node.shippingAddress?.province,
+          node.shippingAddress?.zip,
+          node.shippingAddress?.country,
+        ]),
+        billingAddress: compactAddress([
+          node.billingAddress?.address1,
+          node.billingAddress?.address2,
+          node.billingAddress?.city,
+          node.billingAddress?.province,
+          node.billingAddress?.zip,
+          node.billingAddress?.country,
+        ]),
+      });
+    }
+  }
+
   return map;
 }
