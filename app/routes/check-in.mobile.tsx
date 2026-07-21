@@ -20,6 +20,14 @@ import BrandHeader from "../components/BrandHeader";
 // eslint-disable-next-line import/no-unresolved
 import brandStyles from "../styles/brand.css?url";
 
+type BarcodeDetectorLike = {
+  detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
+};
+
+type BarcodeDetectorCtor = new (options?: {
+  formats?: string[];
+}) => BarcodeDetectorLike;
+
 const OUT_OF_CREDITS_MESSAGE =
   "You have run out of ticket credits, buy more now to continue checking your customers in.";
 const SCANNER_REGION_ID = "mobile-ticket-qr-scanner-region";
@@ -443,6 +451,9 @@ export default function MobileCheckInPage() {
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [scannerStarting, setScannerStarting] = useState(false);
   const [photoScanLoading, setPhotoScanLoading] = useState(false);
+  const [notFoundScannedTicketId, setNotFoundScannedTicketId] = useState<
+    string | null
+  >(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scannerRef = useRef<import("html5-qrcode").Html5Qrcode | null>(null);
 
@@ -454,6 +465,9 @@ export default function MobileCheckInPage() {
 
   const resolvedCheckedInAt =
     actionResult?.checkedInAt ?? actionResult?.ticket?.checkedInAt ?? null;
+  const notFoundAlertMessage = notFoundScannedTicketId
+    ? `Ticket not found. Scanned ticket id: ${notFoundScannedTicketId}`
+    : null;
   const canCheckIn = Boolean(actionResult?.valid && !resolvedCheckedInAt);
   const canUpdateNote = Boolean(actionResult?.valid && resolvedCheckedInAt);
   const isBusy = fetcher.state !== "idle";
@@ -464,6 +478,7 @@ export default function MobileCheckInPage() {
       const normalized = nextTicketId.trim();
       if (!normalized) return;
       setTicketId(normalized);
+      setNotFoundScannedTicketId(null);
       fetcher.submit(
         { intent: "lookup", ticketId: normalized, t: loaderData.token },
         { method: "POST" },
@@ -540,7 +555,8 @@ export default function MobileCheckInPage() {
       setPhotoScanLoading(true);
       setScannerError(null);
       try {
-        const { Html5Qrcode } = await import("html5-qrcode");
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } =
+          await import("html5-qrcode");
         const tempRegionId = `${SCANNER_REGION_ID}-file`;
         const tempNode = document.createElement("div");
         tempNode.id = tempRegionId;
@@ -548,13 +564,43 @@ export default function MobileCheckInPage() {
         document.body.appendChild(tempNode);
 
         const fileScanner = new Html5Qrcode(tempRegionId, {
-          formatsToSupport: [],
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
           verbose: false,
         });
 
         try {
-          const decodedText = await fileScanner.scanFile(file, false);
-          handleDecodedTicket(decodedText);
+          try {
+            const decodedText = await fileScanner.scanFile(file, false);
+            handleDecodedTicket(decodedText);
+          } catch {
+            // Fall back to native barcode detection for images the primary decoder misses.
+            const barcodeDetectorCtor = (
+              globalThis as { BarcodeDetector?: BarcodeDetectorCtor }
+            ).BarcodeDetector;
+
+            if (!barcodeDetectorCtor) {
+              throw new Error("Unable to read a QR code from that image.");
+            }
+
+            const imageBitmap = await createImageBitmap(file);
+            try {
+              const detector = new barcodeDetectorCtor({
+                formats: ["qr_code"],
+              });
+              const detections = await detector.detect(imageBitmap);
+              const detectedValue = detections.find(
+                (item) => typeof item.rawValue === "string" && item.rawValue,
+              )?.rawValue;
+
+              if (!detectedValue) {
+                throw new Error("Unable to read a QR code from that image.");
+              }
+
+              handleDecodedTicket(detectedValue);
+            } finally {
+              imageBitmap.close();
+            }
+          }
         } finally {
           try {
             fileScanner.clear();
@@ -680,6 +726,21 @@ export default function MobileCheckInPage() {
     }
   }, [actionResult?.checkInNote, actionResult?.ticket]);
 
+  useEffect(() => {
+    if (!actionResult) return;
+
+    if (
+      actionResult.intent === "lookup" &&
+      actionResult.reason === "NOT_FOUND"
+    ) {
+      const scannedTicketId = ticketId.trim();
+      setNotFoundScannedTicketId(scannedTicketId || null);
+      return;
+    }
+
+    setNotFoundScannedTicketId(null);
+  }, [actionResult]);
+
   if (!loaderData.authorized) {
     return (
       <div className="flex min-h-screen flex-col">
@@ -702,137 +763,48 @@ export default function MobileCheckInPage() {
   return (
     <div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_left,_#d1fae5,_transparent_45%),linear-gradient(180deg,_#f8fafc_0%,_#ecfdf5_100%)]">
       <BrandHeader />
+
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-5 py-8 text-foreground sm:px-6">
-        <section className="rounded-3xl border border-emerald-200 bg-white/90 p-6 shadow-sm backdrop-blur">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-            Secure mobile session
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold leading-tight text-neutral-950 sm:text-4xl">
-            Ticket Scanner
-          </h1>
-          <p className="mt-3 text-sm text-neutral-700">
-            Store: <strong>{loaderData.shopDomain}</strong>
-          </p>
-          <p className="mt-1 text-xs text-neutral-500">
-            Link expires: {formatLocalDate(loaderData.expiresAt)}
-          </p>
-          <p className="mt-4 text-sm text-neutral-700">{status}</p>
-        </section>
-
-        <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            style={{ display: "none" }}
-            onChange={handlePhotoScan}
-          />
-
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => setScannerOpen((open) => !open)}
-              className="rounded-full bg-emerald-700 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800"
-            >
-              {scannerOpen ? "Close scanner" : "Scan QR code"}
-            </button>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="rounded-full border border-neutral-300 bg-white px-5 py-2 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
-            >
-              {photoScanLoading ? "Reading photo..." : "Use photo"}
-            </button>
-          </div>
-
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-            <label className="flex-1">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Ticket ID
-              </span>
-              <input
-                type="text"
-                value={ticketId}
-                onChange={(event) => setTicketId(event.currentTarget.value)}
-                className="w-full rounded-xl border border-neutral-300 px-4 py-3 text-base text-neutral-900 outline-none ring-emerald-400 transition focus:ring"
-                placeholder="TKT_..."
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => lookup(ticketId)}
-              disabled={isBusy}
-              className="rounded-full border border-neutral-300 bg-white px-5 py-2 text-sm font-semibold text-neutral-800 transition enabled:hover:bg-neutral-100 disabled:opacity-50"
-            >
-              Load ticket
-            </button>
-          </div>
-
-          {scannerError ? (
-            <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-              {scannerError}
-            </p>
-          ) : null}
-
-          {scannerOpen ? (
-            <div className="mt-4 rounded-2xl border border-black/10 bg-neutral-950 p-3">
-              <div
-                id={SCANNER_REGION_ID}
-                style={{
-                  width: "100%",
-                  maxWidth: "420px",
-                  minHeight: "300px",
-                  borderRadius: "12px",
-                  overflow: "hidden",
-                  background: "#000",
-                }}
-              />
-              {scannerStarting ? (
-                <p className="mt-2 text-sm text-neutral-200">
-                  Starting camera...
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </section>
+        <h1 className="mt-2 text-3xl font-semibold leading-tight text-neutral-950 sm:text-4xl">
+          Ticket Scanner
+        </h1>
 
         {actionResult?.ticket ? (
           <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
-              Ticket
+              Scanned Ticket:
             </p>
             <h2 className="mt-2 text-2xl font-semibold text-neutral-950">
               {actionResult.ticket.orderName ?? "Unknown order"}:
               {actionResult.ticket.customerFullName ??
                 `${actionResult.ticket.customerFirstName ?? ""} ${actionResult.ticket.customerLastName ?? ""}`.trim()}
             </h2>
+            <p>
+              <strong>Status:</strong>{" "}
+              <span
+                className={
+                  resolvedCheckedInAt
+                    ? "font-semibold text-red-700"
+                    : "font-semibold text-emerald-700"
+                }
+              >
+                {resolvedCheckedInAt
+                  ? `Checked in on ${formatLocalStatusDate(resolvedCheckedInAt)}`
+                  : "Ready to check in"}
+              </span>
+            </p>
             <div className="mt-3 space-y-1 text-sm text-neutral-700">
-              <p>
-                <strong>TicketID:</strong> {actionResult.ticket.ticketId},{" "}
+              <p className="text-xs text-neutral-700">
+                {actionResult.ticket.ticketId}
               </p>
               <p>
                 <strong>Email:</strong>{" "}
                 {actionResult.ticket.customerEmail ?? "Unknown"}
               </p>
 
-              {actionResult.ticket.shippingAddress ? (
-                <p>
-                  <strong>Shipping:</strong>{" "}
-                  {actionResult.ticket.shippingAddress}
-                </p>
-              ) : null}
               {actionResult.ticket.billingAddress ? (
-                <p>
-                  <strong>Billing:</strong> {actionResult.ticket.billingAddress}
-                </p>
+                <p>{actionResult.ticket.billingAddress}</p>
               ) : null}
-              <p>
-                <strong>Status:</strong>{" "}
-                {resolvedCheckedInAt
-                  ? `Checked in on ${formatLocalStatusDate(resolvedCheckedInAt)}`
-                  : "Ready to check in"}
-              </p>
             </div>
 
             <div className="mt-4">
@@ -872,6 +844,106 @@ export default function MobileCheckInPage() {
             </div>
           </section>
         ) : null}
+
+        <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: "none" }}
+            onChange={handlePhotoScan}
+          />
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => setScannerOpen((open) => !open)}
+              className="rounded-full bg-emerald-700 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800"
+            >
+              {scannerOpen ? "Close scanner" : "Scan QR code"}
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-full border border-neutral-300 bg-white px-5 py-2 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
+            >
+              {photoScanLoading ? "Reading photo..." : "Use photo"}
+            </button>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="flex-1">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                Ticket ID
+              </span>
+              <input
+                type="text"
+                value={ticketId}
+                onChange={(event) => {
+                  setTicketId(event.currentTarget.value);
+                  setNotFoundScannedTicketId(null);
+                }}
+                className="w-full rounded-xl border border-neutral-300 px-4 py-3 text-base text-neutral-900 outline-none ring-emerald-400 transition focus:ring"
+                placeholder="TKT_..."
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => lookup(ticketId)}
+              disabled={isBusy}
+              className="rounded-full border border-neutral-300 bg-white px-5 py-2 text-sm font-semibold text-neutral-800 transition enabled:hover:bg-neutral-100 disabled:opacity-50"
+            >
+              Load ticket
+            </button>
+          </div>
+
+          {scannerError ? (
+            <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              {scannerError}
+            </p>
+          ) : null}
+
+          {notFoundAlertMessage ? (
+            <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+              {notFoundAlertMessage}
+            </p>
+          ) : null}
+
+          {scannerOpen ? (
+            <div className="mt-4 rounded-2xl border border-black/10 bg-neutral-950 p-3">
+              <div
+                id={SCANNER_REGION_ID}
+                style={{
+                  width: "100%",
+                  maxWidth: "420px",
+                  minHeight: "300px",
+                  borderRadius: "12px",
+                  overflow: "hidden",
+                  background: "#000",
+                }}
+              />
+              {scannerStarting ? (
+                <p className="mt-2 text-sm text-neutral-200">
+                  Starting camera...
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded-3xl border border-emerald-200 bg-white/90 p-6 shadow-sm backdrop-blur">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+            Secure Session for This Device
+          </p>
+
+          <p className="mt-3 text-sm text-neutral-700">
+            Store: <strong>{loaderData.shopDomain}</strong>
+          </p>
+          <p className="mt-1 text-xs text-neutral-500">
+            Link/Login expires: {formatLocalDate(loaderData.expiresAt)}
+          </p>
+        </section>
       </main>
     </div>
   );

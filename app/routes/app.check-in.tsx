@@ -974,24 +974,39 @@ export default function CheckInPage() {
 
   return (
     <s-page heading="Event check-in">
-      <s-section heading="Staff mobile scanner">
+      <s-section>
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-            Staff
-          </p>
           <h2 className="mt-2 text-3xl font-semibold leading-tight text-emerald-950">
             QR Code Ticket Scanner
           </h2>
+          <p>
+            The QR Code Ticket Scanner opens your browser app that will allow
+            you to scan tickets and check customers in.
+          </p>
 
           <div className="mt-5 flex justify-center">
-            <a
-              href={mobileScannerUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex min-h-12 items-center justify-center rounded-full bg-emerald-700 px-8 py-3 text-base font-semibold text-white no-underline shadow-md transition hover:bg-emerald-800 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+            <button
+              style={{
+                backgroundColor: "#047857",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "9999px",
+                minHeight: "2.5rem",
+                padding: "0.5rem 1.25rem",
+                fontSize: "1.125rem",
+                fontWeight: 600,
+                lineHeight: 1,
+              }}
             >
-              Open QR Code Ticket Scanner
-            </a>
+              <a
+                href={mobileScannerUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{ textDecoration: "none", color: "inherit" }}
+              >
+                Open QR Code Ticket Scanner
+              </a>
+            </button>
           </div>
         </div>
       </s-section>
@@ -1359,17 +1374,17 @@ export default function CheckInPage() {
                       </strong>
                       {entry.orderTicket.customerEmail
                         ? ` · ${entry.orderTicket.customerEmail}`
-                        : ""}
+                        : ""}{" "}
+                      at {formatReportDate(entry.scannedAt)}
                     </s-text>
                     {renderLineItemsTable(
                       entry.orderTicket.lineItems,
                       entry.orderTicket.currency,
                       formatPrice,
                     )}
-                    <s-text>
-                      {entry.orderTicket.ticketId} ·{" "}
-                      {formatReportDate(entry.scannedAt)}
-                    </s-text>
+                    <p className="text-xs text-neutral-700">
+                      ID: {entry.orderTicket.ticketId}
+                    </p>
                   </s-box>
                 ))}
               </s-stack>

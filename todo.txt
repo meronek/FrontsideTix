@@ -1,8 +1,12 @@
 Tons of little things to do to wrap this shit up:
 
-Mobile check-in page - seems to work now, but layout is shit. Once scanned, put checkin form at the top above search, clean up the top status, it should go down at the bottom of the page all that tech shit
+DONE: Mobile check-in page - seems to work now, but layout is shit. Once scanned, put checkin form at the top above search, clean up the top status, it should go down at the bottom of the page all that tech shit
 
-Event check-in page - recent check ins and sales, stack those on mobile. remove qr scan buttons from there, just have link to ticket scanner
+DONE: Event check-in page - recent check ins and sales, stack those on mobile. remove qr scan buttons from there, just have link to ticket scanner
 
 Reports page, make it cleaner on mobile
+
+clean up the marketing/front page, add screen shots etc
+
+fill in the new app details and submit again for approval
 
