@@ -852,16 +852,19 @@ export default function CheckInPage() {
                 type="button"
                 onClick={checkIn}
                 disabled={lookupLoading}
-                className="inline-flex 
-                min-h-10 
-                items-center 
-                justify-center 
-                rounded-full bg-emerald-700 
-                px-5 py-2 text-lg 
-                font-semibold text-white transition 
-                enabled:hover:bg-emerald-800 
-                disabled:cursor-not-allowed 
-                disabled:opacity-60"
+                style={{
+                  backgroundColor: "#047857",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "9999px",
+                  minHeight: "2.5rem",
+                  padding: "0.5rem 1.25rem",
+                  fontSize: "1.125rem",
+                  fontWeight: 600,
+                  lineHeight: 1,
+                  cursor: lookupLoading ? "not-allowed" : "pointer",
+                  opacity: lookupLoading ? 0.6 : 1,
+                }}
               >
                 {lookupLoading ? "Checking in..." : "Check In"}
               </button>
@@ -870,16 +873,19 @@ export default function CheckInPage() {
                 type="button"
                 onClick={checkIn}
                 disabled={lookupLoading}
-                className="inline-flex 
-                  min-h-10 
-                  items-center 
-                  justify-center 
-                  rounded-full bg-emerald-700 
-                  px-5 py-2 text-lg 
-                  font-semibold text-white transition 
-                  enabled:hover:bg-emerald-800 
-                  disabled:cursor-not-allowed 
-                  disabled:opacity-60"
+                style={{
+                  backgroundColor: "#047857",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "9999px",
+                  minHeight: "2.5rem",
+                  padding: "0.5rem 1.25rem",
+                  fontSize: "1.125rem",
+                  fontWeight: 600,
+                  lineHeight: 1,
+                  cursor: lookupLoading ? "not-allowed" : "pointer",
+                  opacity: lookupLoading ? 0.6 : 1,
+                }}
               >
                 {lookupLoading ? "Updating..." : "Update note"}
               </button>
