@@ -851,12 +851,20 @@ export default function CheckInPage() {
             />
             {canCheckIn ? (
               <button
-                type="button"
                 onClick={checkIn}
                 disabled={lookupLoading}
-                className="inline-flex min-h-10 items-center justify-center rounded-full bg-emerald-700 px-5 py-2 text-sm font-semibold text-white transition enabled:hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex 
+                min-h-10 
+                items-center 
+                justify-center 
+                rounded-full bg-emerald-700 
+                px-5 py-2 text-lg 
+                font-semibold text-white transition 
+                enabled:hover:bg-emerald-800 
+                disabled:cursor-not-allowed 
+                disabled:opacity-60"
               >
-                {lookupLoading ? "Checking in..." : "Check in"}
+                {lookupLoading ? "Checking in..." : "Check In"}
               </button>
             ) : canUpdateNote ? (
               <s-button
