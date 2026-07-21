@@ -168,14 +168,12 @@ export const action = async ({
   if (intent === "search") {
     const q = String(formData.get("q") ?? "").trim();
     if (!q) return { intent, results: [] };
-    // NOTE: no `mode: "insensitive"` — unsupported on SQLite (LIKE is already
-    // ASCII case-insensitive there).
     const tickets = await db.orderTicket.findMany({
       where: {
         shopId: shop.id,
         OR: [
-          { customerEmail: { contains: q } },
-          { orderName: { contains: q } },
+          { customerEmail: { contains: q, mode: "insensitive" } },
+          { orderName: { contains: q, mode: "insensitive" } },
         ],
       },
       select: {
@@ -851,6 +849,7 @@ export default function CheckInPage() {
             />
             {canCheckIn ? (
               <button
+                type="button"
                 onClick={checkIn}
                 disabled={lookupLoading}
                 className="inline-flex 
@@ -867,12 +866,23 @@ export default function CheckInPage() {
                 {lookupLoading ? "Checking in..." : "Check In"}
               </button>
             ) : canUpdateNote ? (
-              <s-button
+              <button
+                type="button"
                 onClick={checkIn}
-                {...(lookupLoading ? { loading: true } : {})}
+                disabled={lookupLoading}
+                className="inline-flex 
+                  min-h-10 
+                  items-center 
+                  justify-center 
+                  rounded-full bg-emerald-700 
+                  px-5 py-2 text-lg 
+                  font-semibold text-white transition 
+                  enabled:hover:bg-emerald-800 
+                  disabled:cursor-not-allowed 
+                  disabled:opacity-60"
               >
-                Update note
-              </s-button>
+                {lookupLoading ? "Updating..." : "Update note"}
+              </button>
             ) : null}
           </s-stack>
         ) : null}
